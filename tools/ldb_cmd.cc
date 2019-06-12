@@ -250,6 +250,10 @@ LDBCommand* LDBCommand::SelectCommand(const ParsedParams& parsed_params) {
     return new IngestExternalSstFilesCommand(parsed_params.cmd_params,
                                              parsed_params.option_map,
                                              parsed_params.flags);
+  } else if (parsed_params.cmd == RemoveSstFileCommand::Name()) {
+    return new RemoveSstFileCommand(parsed_params.cmd_params,
+                                    parsed_params.option_map,
+                                    parsed_params.flags);
   }
   return nullptr;
 }
@@ -3120,6 +3124,52 @@ void IngestExternalSstFilesCommand::DoCommand() {
 Options IngestExternalSstFilesCommand::PrepareOptionsForOpenDB() {
   Options opt = LDBCommand::PrepareOptionsForOpenDB();
   opt.create_if_missing = create_if_missing_;
+  return opt;
+}
+
+void RemoveSstFileCommand::Help(std::string& ret) {
+  ret.append("  ");
+  ret.append(RemoveSstFileCommand::Name());
+  ret.append(" <sst_file_name> ");
+  ret.append("\n");
+}
+
+RemoveSstFileCommand::RemoveSstFileCommand(
+    const std::vector<std::string>& params,
+    const std::map<std::string, std::string>& options,
+    const std::vector<std::string>& flags)
+    : LDBCommand(
+          options, flags, false /* is_read_only */,
+          BuildCmdLineOptions({}))
+{
+  if (params.size() != 1) {
+    exec_state_ =
+        LDBCommandExecuteResult::Failed("SST file must be specified");
+  } else {
+    file_ = params.at(0);
+    //sst_file_num_ = std::stoull(params.at(0));
+    //sst_file_level_ = std::stoi(params.at(1));
+  }
+}
+
+void RemoveSstFileCommand::DoCommand() {
+  if (!db_) {
+    assert(GetExecuteState().IsFailed());
+    return;
+  }
+
+  Status st = db_->DeleteFile(file_, true);
+  if (st.ok()) {
+    fprintf(stdout, "OK\n");
+  } else {
+    exec_state_ = LDBCommandExecuteResult::Failed(st.ToString());
+  }
+}
+
+Options RemoveSstFileCommand::PrepareOptionsForOpenDB() {
+  Options opt = LDBCommand::PrepareOptionsForOpenDB();
+  opt.create_if_missing = create_if_missing_;
+  opt.paranoid_checks = false;
   return opt;
 }
 

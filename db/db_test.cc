@@ -2483,7 +2483,7 @@ class ModelDB : public DB {
     return Status::OK();
   }
 
-  virtual Status DeleteFile(std::string /*name*/) override {
+  virtual Status DeleteFile(std::string /*name*/, bool = false /*force*/) override {
     return Status::OK();
   }
 

@@ -573,4 +573,23 @@ class IngestExternalSstFilesCommand : public LDBCommand {
   static const std::string ARG_INGEST_BEHIND;
 };
 
+
+class RemoveSstFileCommand : public LDBCommand {
+ public:
+  static std::string Name() { return "remove_sst_file"; }
+  RemoveSstFileCommand(
+      const std::vector<std::string>& params,
+      const std::map<std::string, std::string>& options,
+      const std::vector<std::string>& flags);
+
+  virtual void DoCommand() override;
+
+  virtual Options PrepareOptionsForOpenDB() override;
+
+  static void Help(std::string& ret);
+
+ private:
+  std::string file_;
+};
+
 }  // namespace rocksdb
