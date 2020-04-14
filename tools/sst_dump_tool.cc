@@ -336,6 +336,13 @@ Status SstFileDumper::ReadSequential(bool print_kv, uint64_t read_num,
       break;
     }
 
+    if (print_kv) {
+      fprintf(stdout, "%s => %s\n",
+          ikey.DebugString(output_hex_).c_str(),
+          value.ToString(output_hex_).c_str());
+    }
+
+    if (last_key.size() == 0) continue;
     if (internal_comparator_.Compare(key, Slice(last_key)) <= 0) {
       InternalKey current, last;
       current.DecodeFrom(key);
@@ -343,12 +350,6 @@ Status SstFileDumper::ReadSequential(bool print_kv, uint64_t read_num,
       return Status::Corruption("current key " + current.DebugString(true) + " is not greater than last key " + last.DebugString(true));
     }
     last_key = key.ToString(false);
-
-    if (print_kv) {
-      fprintf(stdout, "%s => %s\n",
-          ikey.DebugString(output_hex_).c_str(),
-          value.ToString(output_hex_).c_str());
-    }
   }
 
   read_num_ += i;

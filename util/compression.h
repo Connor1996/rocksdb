@@ -1084,12 +1084,15 @@ inline CacheAllocationPtr LZ4_Uncompress(const UncompressionInfo& info,
     // new encoding, using varint32 to store size information
     if (!compression::GetDecompressedSizeInfo(&input_data, &input_length,
                                               &output_len)) {
+      printf("what1");
       return nullptr;
     }
   } else {
     // legacy encoding, which is not really portable (depends on big/little
     // endianness)
     if (input_length < 8) {
+      printf("what2");
+
       return nullptr;
     }
     memcpy(&output_len, input_data, sizeof(output_len));
@@ -1108,15 +1111,21 @@ inline CacheAllocationPtr LZ4_Uncompress(const UncompressionInfo& info,
   *decompress_size = LZ4_decompress_safe_continue(
       stream, input_data, output.get(), static_cast<int>(input_length),
       static_cast<int>(output_len));
+  if (*decompress_size < 0) printf("here1 %d %ld %p", *decompress_size, compression_dict.size(), stream);
+
   LZ4_freeStreamDecode(stream);
 #else   // up to r123
   *decompress_size = LZ4_decompress_safe(input_data, output.get(),
                                          static_cast<int>(input_length),
                                          static_cast<int>(output_len));
+      printf("here2");
+
   (void)ctx;
 #endif  // LZ4_VERSION_NUMBER >= 10400
 
   if (*decompress_size < 0) {
+      printf("what3");
+
     return nullptr;
   }
   assert(*decompress_size == static_cast<int>(output_len));
@@ -1128,6 +1137,8 @@ inline CacheAllocationPtr LZ4_Uncompress(const UncompressionInfo& info,
   (void)decompress_size;
   (void)compress_format_version;
   (void)allocator;
+      printf("what4");
+
   return nullptr;
 #endif
 }

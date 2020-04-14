@@ -32,7 +32,6 @@ namespace rocksdb {
 
 inline void BlockFetcher::CheckBlockChecksum() {
   // Check the crc of the type and the block contents
-  if (read_options_.verify_checksums) {
     const char* data = slice_.data();  // Pointer to where Read put the data
     PERF_TIMER_GUARD(block_checksum_time);
     uint32_t value = DecodeFixed32(data + block_size_ + 1);
@@ -58,13 +57,20 @@ inline void BlockFetcher::CheckBlockChecksum() {
             file_->file_name() + " offset " + ToString(handle_.offset()) +
             " size " + ToString(block_size_));
     }
-    if (status_.ok() && actual != value) {
-      status_ = Status::Corruption(
+    if (status_.ok()) {
+
+      if (actual != value) {
+      fprintf(stdout, "%s\n", (
           "block checksum mismatch: expected " + ToString(actual) + ", got " +
           ToString(value) + "  in " + file_->file_name() + " offset " +
-          ToString(handle_.offset()) + " size " + ToString(block_size_));
+          ToString(handle_.offset()) + " size " + ToString(block_size_)).c_str());
+      } else {
+        fprintf(stdout, "%s\n", ("block checksum match: got " +
+          ToString(value) + "  in " + file_->file_name() + " offset " +
+          ToString(handle_.offset()) + " size " + ToString(block_size_)).c_str());
+      }
     }
-  }
+  
 }
 
 inline bool BlockFetcher::TryGetUncompressBlockFromPersistentCache() {
@@ -272,6 +278,10 @@ Status BlockFetcher::ReadBlockContents() {
     status_ = UncompressBlockContents(info, slice_.data(), block_size_,
                                       contents_, footer_.version(), ioptions_,
                                       memory_allocator_);
+      fprintf(stdout, "%s\n", (
+          "block uncompression: got " +
+          status_.ToString() + "  in " + file_->file_name() + " offset " +
+          ToString(handle_.offset()) + " size " + ToString(block_size_)).c_str());
     compression_type_ = kNoCompression;
   } else {
     GetBlockContents();
