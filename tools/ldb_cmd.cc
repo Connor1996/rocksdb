@@ -24,6 +24,7 @@
 #include "rocksdb/write_batch.h"
 #include "rocksdb/write_buffer_manager.h"
 #include "table/scoped_arena_iterator.h"
+#include "table/sst_file_writer_collectors.h"
 #include "tools/ldb_cmd_impl.h"
 #include "tools/sst_dump_tool_imp.h"
 #include "util/cast_util.h"
@@ -2969,6 +2970,45 @@ void DumpSstFile(Options options, std::string filename, bool output_hex,
     if (table_properties != nullptr) {
       std::cout << std::endl << "Table Properties:" << std::endl;
       std::cout << table_properties->ToString("\n") << std::endl;
+
+      auto props = table_properties;
+      const auto& uprops = props->user_collected_properties;
+
+      // Get table version
+      auto version_iter = uprops.find(ExternalSstFilePropertyNames::kVersion);
+      if (version_iter == uprops.end()) {
+        std::cout << "External file version not found";
+        return;
+      }
+      auto version = DecodeFixed32(version_iter->second.c_str());
+
+      auto seqno_iter = uprops.find(ExternalSstFilePropertyNames::kGlobalSeqno);
+      if (version == 2) {
+        // version 2 imply that we have global sequence number
+        if (seqno_iter == uprops.end()) {
+          std::cout <<  "External file global sequence number not found";
+          return; 
+        }
+
+        // Set the global sequence number
+        auto original_seqno = DecodeFixed64(seqno_iter->second.c_str());
+        auto offsets_iter = props->properties_offsets.find(
+            ExternalSstFilePropertyNames::kGlobalSeqno);
+        if (offsets_iter == props->properties_offsets.end() ||
+            offsets_iter->second == 0) {
+          std::cout << "Was not able to find file global seqno field";
+          return;
+        }
+        std::cout << "original_seqno: " << original_seqno << "global_seqno_offset: " <<  static_cast<size_t>(offsets_iter->second);
+      } else if (version == 1) {
+        // SST file V1 should not have global seqno field
+        assert(seqno_iter == uprops.end());
+          std::cout <<  "External SST file V1 does not support global seqno";
+          return;
+      } else {
+        std::cout << "External file version is not supported";
+        return;
+      }
     }
   }
 }
