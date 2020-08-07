@@ -2513,7 +2513,7 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
     }
     input_version->Ref();
     status = versions_->LogAndApply(cfd, *cfd->GetLatestMutableCFOptions(),
-                                    &edit, &mutex_, directories_.GetDbDir(), true);
+                                    &edit, &mutex_, directories_.GetDbDir(), false, nullptr, true);
       time3 += timer3.ElapsedNanos();
       timer4.Start();
     if (status.ok()) {
