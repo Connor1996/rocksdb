@@ -2976,17 +2976,23 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
   VersionEdit edit;
   std::set<FileMetaData*> deleted_files;
   JobContext job_context(next_job_id_.fetch_add(1), true);
+    StopWatchNano timer1(Env::Default());
+    StopWatchNano timer2(Env::Default());
+    StopWatchNano timer3(Env::Default());
+    StopWatchNano timer4(Env::Default());
+    StopWatchNano timer5(Env::Default());
+
+    uint64_t time1 =0, time2 =0, time3 =0, time4 =0, time5 =0; 
   {
+
     InstrumentedMutexLock l(&mutex_);
     Version* input_version = cfd->current();
     {
-      PERF_TIMER_GUARD(write_pre_and_post_process_time);
-      PERF_TIMER_GUARD(find_table_nanos);
-      PERF_TIMER_STOP(find_table_nanos);
       auto* vstorage = input_version->storage_info();
       for (size_t r = 0; r < n; r++) {
         auto begin = ranges[r].start, end = ranges[r].limit;
         for (int i = 1; i < cfd->NumberLevels(); i++) {
+          timer1.Start();
           if (vstorage->LevelFiles(i).empty() ||
               !vstorage->OverlapInLevel(i, begin, end)) {
             continue;
@@ -3005,8 +3011,8 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
             end_storage.SetMaxPossibleForUserKey(*end);
             end_key = &end_storage;
           }
-          PERF_TIMER_STOP(write_pre_and_post_process_time);
-          PERF_TIMER_START(find_table_nanos);
+          time1 += timer1.ElapsedNanos();
+          timer2.Start();
           vstorage->GetCleanInputsWithinInterval(
               i, begin_key, end_key, &level_files, -1 /* hint_index */,
               nullptr /* file_index */);
@@ -3029,43 +3035,51 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
             deleted_files.insert(level_file);
             level_file->being_compacted = true;
           }
-          PERF_TIMER_STOP(find_table_nanos);
-          PERF_TIMER_START(write_pre_and_post_process_time);
+          time2 += timer2.ElapsedNanos();
         }
       }
     }
     {
-      PERF_TIMER_GUARD(write_wal_time);
+      timer3.Start();
       if (edit.GetDeletedFiles().empty()) {
         job_context.Clean();
         return Status::OK();
       }
       input_version->Ref();
       status = versions_->LogAndApply(cfd, *cfd->GetLatestMutableCFOptions(),
-                                      &edit, &mutex_, directories_.GetDbDir());
+                                      &edit, &mutex_, directories_.GetDbDir(), false, nullptr, false);
       if (status.ok()) {
         InstallSuperVersionAndScheduleWork(cfd,
                                           &job_context.superversion_contexts[0],
                                           *cfd->GetLatestMutableCFOptions());
       }
+      time3 += timer3.ElapsedNanos();
     }
     {
-      PERF_TIMER_GUARD(write_memtable_time);
+      timer4.Start();
       for (auto* deleted_file : deleted_files) {
         deleted_file->being_compacted = false;
       }
       input_version->Unref();
       FindObsoleteFiles(&job_context, false);
+      time4 += timer4.ElapsedNanos();
     }
   }  // lock released here
 
-  LogFlush(immutable_db_options_.info_log);
+  timer5.Start();
   // remove files outside the db-lock
   if (job_context.HaveSomethingToDelete()) {
     // Call PurgeObsoleteFiles() without holding mutex.
     PurgeObsoleteFiles(job_context);
   }
   job_context.Clean();
+  time5 += timer5.ElapsedNanos();
+
+  ROCKS_LOG_INFO(immutable_db_options_.info_log,
+                   "delete files cost: 1 %lf ms, 2 %lf ms, 3 %lf ms, 4 %lf ms, 5 %lf ms", time1 * 1.0 / 1000000, time2 * 1.0 / 1000000, time3 * 1.0 / 1000000, time4 * 1.0 / 1000000, time5 * 1.0 / 1000000);  
+  LogFlush(immutable_db_options_.info_log);
+
+
   return status;
 }
 
