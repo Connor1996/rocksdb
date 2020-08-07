@@ -2443,57 +2443,70 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
   VersionEdit edit;
   std::set<FileMetaData*> deleted_files;
   JobContext job_context(next_job_id_.fetch_add(1), true);
+    StopWatchNano timer1(Env::Default());
+    StopWatchNano timer2(Env::Default());
+    StopWatchNano timer3(Env::Default());
+    StopWatchNano timer4(Env::Default());
+    StopWatchNano timer5(Env::Default());
+
+    uint64_t time1 =0, time2 =0, time3 =0, time4 =0, time5 =0; 
   {
+
     InstrumentedMutexLock l(&mutex_);
     Version* input_version = cfd->current();
-
-    auto* vstorage = input_version->storage_info();
-    for (size_t r = 0; r < n; r++) {
-      auto begin = ranges[r].start, end = ranges[r].limit;
-      for (int i = 1; i < cfd->NumberLevels(); i++) {
-        if (vstorage->LevelFiles(i).empty() ||
-            !vstorage->OverlapInLevel(i, begin, end)) {
-          continue;
-        }
-        std::vector<FileMetaData*> level_files;
-        InternalKey begin_storage, end_storage, *begin_key, *end_key;
-        if (begin == nullptr) {
-          begin_key = nullptr;
-        } else {
-          begin_storage.SetMinPossibleForUserKey(*begin);
-          begin_key = &begin_storage;
-        }
-        if (end == nullptr) {
-          end_key = nullptr;
-        } else {
-          end_storage.SetMaxPossibleForUserKey(*end);
-          end_key = &end_storage;
-        }
-
-        vstorage->GetCleanInputsWithinInterval(
-            i, begin_key, end_key, &level_files, -1 /* hint_index */,
-            nullptr /* file_index */);
-        FileMetaData* level_file;
-        for (uint32_t j = 0; j < level_files.size(); j++) {
-          level_file = level_files[j];
-          if (level_file->being_compacted) {
+    {
+      auto* vstorage = input_version->storage_info();
+      for (size_t r = 0; r < n; r++) {
+        auto begin = ranges[r].start, end = ranges[r].limit;
+        for (int i = 1; i < cfd->NumberLevels(); i++) {
+          timer1.Start();
+          if (vstorage->LevelFiles(i).empty() ||
+              !vstorage->OverlapInLevel(i, begin, end)) {
             continue;
           }
-          if (deleted_files.find(level_file) != deleted_files.end()) {
-            continue;
+          std::vector<FileMetaData*> level_files;
+          InternalKey begin_storage, end_storage, *begin_key, *end_key;
+          if (begin == nullptr) {
+            begin_key = nullptr;
+          } else {
+            begin_storage.SetMinPossibleForUserKey(*begin);
+            begin_key = &begin_storage;
           }
-          if (!include_end && end != nullptr &&
-              cfd->user_comparator()->Compare(level_file->largest.user_key(),
-                                              *end) == 0) {
-            continue;
+          if (end == nullptr) {
+            end_key = nullptr;
+          } else {
+            end_storage.SetMaxPossibleForUserKey(*end);
+            end_key = &end_storage;
           }
-          edit.SetColumnFamily(cfd->GetID());
-          edit.DeleteFile(i, level_file->fd.GetNumber());
-          deleted_files.insert(level_file);
-          level_file->being_compacted = true;
+          time1 += timer1.ElapsedNanos();
+          timer2.Start();
+          vstorage->GetCleanInputsWithinInterval(
+              i, begin_key, end_key, &level_files, -1 /* hint_index */,
+              nullptr /* file_index */);
+          FileMetaData* level_file;
+          for (uint32_t j = 0; j < level_files.size(); j++) {
+            level_file = level_files[j];
+            if (level_file->being_compacted) {
+              continue;
+            }
+            if (deleted_files.find(level_file) != deleted_files.end()) {
+              continue;
+            }
+            if (!include_end && end != nullptr &&
+                cfd->user_comparator()->Compare(level_file->largest.user_key(),
+                                                *end) == 0) {
+              continue;
+            }
+            edit.SetColumnFamily(cfd->GetID());
+            edit.DeleteFile(i, level_file->fd.GetNumber());
+            deleted_files.insert(level_file);
+            level_file->being_compacted = true;
+          }
+          time2 += timer2.ElapsedNanos();
         }
       }
     }
+      timer3.Start();
     if (edit.GetDeletedFiles().empty()) {
       job_context.Clean();
       return Status::OK();
@@ -2506,20 +2519,32 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
           cfd, &job_context.superversion_contexts[0],
           *cfd->GetLatestMutableCFOptions(), FlushReason::kDeleteFiles);
     }
-    for (auto* deleted_file : deleted_files) {
-      deleted_file->being_compacted = false;
+      time3 += timer3.ElapsedNanos();
+    {
+      timer4.Start();
+      for (auto* deleted_file : deleted_files) {
+        deleted_file->being_compacted = false;
+      }
+      input_version->Unref();
+      FindObsoleteFiles(&job_context, false);
+      time4 += timer4.ElapsedNanos();
     }
-    input_version->Unref();
-    FindObsoleteFiles(&job_context, false);
   }  // lock released here
 
-  LogFlush(immutable_db_options_.info_log);
+  timer5.Start();
   // remove files outside the db-lock
   if (job_context.HaveSomethingToDelete()) {
     // Call PurgeObsoleteFiles() without holding mutex.
     PurgeObsoleteFiles(job_context);
   }
   job_context.Clean();
+  time5 += timer5.ElapsedNanos();
+
+  ROCKS_LOG_INFO(immutable_db_options_.info_log,
+                   "delete files cost: 1 %lf ms, 2 %lf ms, 3 %lf ms, 4 %lf ms, 5 %lf ms", time1 * 1.0 / 1000000, time2 * 1.0 / 1000000, time3 * 1.0 / 1000000, time4 * 1.0 / 1000000, time5 * 1.0 / 1000000);  
+  LogFlush(immutable_db_options_.info_log);
+
+
   return status;
 }
 

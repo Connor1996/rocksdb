@@ -2841,7 +2841,7 @@ void VersionSet::AppendVersion(ColumnFamilyData* column_family_data,
 Status VersionSet::ProcessManifestWrites(
     std::deque<ManifestWriter>& writers, InstrumentedMutex* mu,
     Directory* db_directory, bool new_descriptor_log,
-    const ColumnFamilyOptions* new_cf_options) {
+    const ColumnFamilyOptions* new_cf_options, bool verbose) {
   assert(!writers.empty());
   ManifestWriter& first_writer = writers.front();
   ManifestWriter* last_writer = &first_writer;
@@ -3024,6 +3024,11 @@ Status VersionSet::ProcessManifestWrites(
 
   {
     EnvOptions opt_env_opts = env_->OptimizeForManifestWrite(env_options_);
+    // begin
+    StopWatchNano timer(Env::Default());
+    if (verbose) {
+      timer.Start();
+    }
     mu->Unlock();
 
     TEST_SYNC_POINT("VersionSet::LogAndApply:WriteManifest");
@@ -3119,6 +3124,11 @@ Status VersionSet::ProcessManifestWrites(
     LogFlush(db_options_->info_log);
     TEST_SYNC_POINT("VersionSet::LogAndApply:WriteManifestDone");
     mu->Lock();
+    // end
+    if (verbose) {
+      ROCKS_LOG_INFO(db_options_->info_log,
+                   "write manifest cost: %lf ms", timer.ElapsedNanos() * 1.0 / 1000000);  
+    }
   }
 
   // Append the old manifest file to the obsolete_manifest_ list to be deleted
@@ -3240,7 +3250,7 @@ Status VersionSet::LogAndApply(
     const autovector<const MutableCFOptions*>& mutable_cf_options_list,
     const autovector<autovector<VersionEdit*>>& edit_lists,
     InstrumentedMutex* mu, Directory* db_directory, bool new_descriptor_log,
-    const ColumnFamilyOptions* new_cf_options) {
+    const ColumnFamilyOptions* new_cf_options, bool verbose) {
   mu->AssertHeld();
   int num_edits = 0;
   for (const auto& elist : edit_lists) {
@@ -3312,7 +3322,7 @@ Status VersionSet::LogAndApply(
   }
 
   return ProcessManifestWrites(writers, mu, db_directory, new_descriptor_log,
-                               new_cf_options);
+                               new_cf_options, verbose);
 }
 
 void VersionSet::LogAndApplyCFHelper(VersionEdit* edit) {
