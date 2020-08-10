@@ -2535,7 +2535,7 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
   // remove files outside the db-lock
   if (job_context.HaveSomethingToDelete()) {
     // Call PurgeObsoleteFiles() without holding mutex.
-    // PurgeObsoleteFiles(job_context);
+    PurgeObsoleteFiles(job_context);
   }
   job_context.Clean();
   time5 += timer5.ElapsedNanos();

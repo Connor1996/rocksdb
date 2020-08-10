@@ -224,8 +224,7 @@ class VersionBuilder::Rep {
     return Status::OK();
   }
 
-  Status CheckConsistencyForDeletes(VersionEdit* /*edit*/, uint64_t number,
-                                    int level) {
+  Status CheckConsistencyForDeletes(std::unordered_map<uint64_t, int>& deletes) {
 #ifdef NDEBUG
     if (!base_vstorage_->force_consistency_checks()) {
       // Dont run consistency checks in release mode except if
@@ -234,41 +233,46 @@ class VersionBuilder::Rep {
     }
 #endif
     // a file to be deleted better exist in the previous version
-    bool found = false;
-    for (int l = 0; !found && l < num_levels_; l++) {
+    for (int l = 0; deletes.size() != 0 && l < num_levels_; l++) {
       const std::vector<FileMetaData*>& base_files =
           base_vstorage_->LevelFiles(l);
       for (size_t i = 0; i < base_files.size(); i++) {
         FileMetaData* f = base_files[i];
-        if (f->fd.GetNumber() == number) {
+        if (deletes.erase(f->fd.GetNumber()) != 0) {
+          if (deletes.size() == 0) {
+            break;
+          }
+        }
+      }
+    }
+
+    for (auto d : deletes) {
+      auto number = d.first;
+      auto level = d.second;
+      // if the file did not exist in the previous version, then it
+      // is possibly moved from lower level to higher level in current
+      // version
+      bool found = false;
+      for (int l = level + 1; l < num_levels_; l++) {
+        auto& level_added = levels_[l].added_files;
+        auto got = level_added.find(number);
+        if (got != level_added.end()) {
           found = true;
           break;
         }
       }
-    }
-    // if the file did not exist in the previous version, then it
-    // is possibly moved from lower level to higher level in current
-    // version
-    for (int l = level + 1; !found && l < num_levels_; l++) {
-      auto& level_added = levels_[l].added_files;
-      auto got = level_added.find(number);
-      if (got != level_added.end()) {
-        found = true;
-        break;
+      // maybe this file was added in a previous edit that was Applied
+      if (!found) {
+        auto& level_added = levels_[level].added_files;
+        auto got = level_added.find(number);
+        if (got != level_added.end()) {
+          found = true;
+        }
       }
-    }
-
-    // maybe this file was added in a previous edit that was Applied
-    if (!found) {
-      auto& level_added = levels_[level].added_files;
-      auto got = level_added.find(number);
-      if (got != level_added.end()) {
-        found = true;
+      if (!found) {
+        fprintf(stderr, "not found %" PRIu64 "\n", number);
+        return Status::Corruption("not found " + NumberToString(number));
       }
-    }
-    if (!found) {
-      fprintf(stderr, "not found %" PRIu64 "\n", number);
-      return Status::Corruption("not found " + NumberToString(number));
     }
     return Status::OK();
   }
@@ -295,13 +299,13 @@ class VersionBuilder::Rep {
 
     // Delete files
     const VersionEdit::DeletedFileSet& del = edit->GetDeletedFiles();
+    std::unordered_map<uint64_t, int> deletes;
     for (const auto& del_file : del) {
       const auto level = del_file.first;
       const auto number = del_file.second;
       if (level < num_levels_) {
         levels_[level].deleted_files.insert(number);
-        CheckConsistencyForDeletes(edit, number, level);
-
+        deletes[number] = level;
         auto exising = levels_[level].added_files.find(number);
         if (exising != levels_[level].added_files.end()) {
           UnrefFile(exising->second);
@@ -317,6 +321,7 @@ class VersionBuilder::Rep {
         }
       }
     }
+    CheckConsistencyForDeletes(deletes);
 
     // Add new files
     for (const auto& new_file : edit->GetNewFiles()) {
@@ -470,9 +475,8 @@ Status VersionBuilder::CheckConsistency(VersionStorageInfo* vstorage) {
   return rep_->CheckConsistency(vstorage);
 }
 
-Status VersionBuilder::CheckConsistencyForDeletes(VersionEdit* edit,
-                                                  uint64_t number, int level) {
-  return rep_->CheckConsistencyForDeletes(edit, number, level);
+Status VersionBuilder::CheckConsistencyForDeletes(std::unordered_map<uint64_t, int>& deletes) {
+  return rep_->CheckConsistencyForDeletes(deletes);
 }
 
 bool VersionBuilder::CheckConsistencyForNumLevels() {

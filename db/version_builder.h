@@ -10,6 +10,7 @@
 #pragma once
 #include "rocksdb/env.h"
 #include "rocksdb/slice_transform.h"
+#include <unordered_map>
 
 namespace rocksdb {
 
@@ -28,8 +29,7 @@ class VersionBuilder {
                  VersionStorageInfo* base_vstorage, Logger* info_log = nullptr);
   ~VersionBuilder();
   Status CheckConsistency(VersionStorageInfo* vstorage);
-  Status CheckConsistencyForDeletes(VersionEdit* edit, uint64_t number,
-                                    int level);
+  Status CheckConsistencyForDeletes(std::unordered_map<uint64_t, int>& deletes);
   bool CheckConsistencyForNumLevels();
   Status Apply(VersionEdit* edit);
   Status SaveTo(VersionStorageInfo* vstorage);
