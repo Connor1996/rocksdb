@@ -29,7 +29,7 @@ class VersionBuilder {
                  VersionStorageInfo* base_vstorage, Logger* info_log = nullptr);
   ~VersionBuilder();
   Status CheckConsistency(VersionStorageInfo* vstorage);
-  Status CheckConsistencyForDeletes(std::unordered_map<uint64_t, int>& deletes);
+  Status CheckConsistencyForDeletes(VersionEdit* edit);
   bool CheckConsistencyForNumLevels();
   Status Apply(VersionEdit* edit);
   Status SaveTo(VersionStorageInfo* vstorage);
