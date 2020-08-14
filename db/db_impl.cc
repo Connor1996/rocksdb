@@ -2441,7 +2441,7 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
   auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
   ColumnFamilyData* cfd = cfh->cfd();
   VersionEdit edit;
-  std::unordered_set<FileMetaData*> deleted_files;
+  std::vector<FileMetaData*> deleted_files;
   JobContext job_context(next_job_id_.fetch_add(1), true);
     StopWatchNano timer1(Env::Default());
     StopWatchNano timer2(Env::Default());
@@ -2452,9 +2452,10 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
     StopWatchNano timer6(Env::Default());
     StopWatchNano timer7(Env::Default());
     StopWatchNano timer8(Env::Default());
+    StopWatchNano timer9(Env::Default());
 
     uint64_t time1 =0, time2 =0, time3 =0, time4 =0, time5 =0; 
-    uint64_t time21 =0, time6 =0, time7 =0, time8 =0; 
+    uint64_t time21 =0, time6 =0, time7 =0, time8 =0, time9 =0; 
   {
 
     InstrumentedMutexLock l(&mutex_);
@@ -2491,16 +2492,12 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
           time2 += timer2.ElapsedNanos();
           timer21.Start();
           FileMetaData* level_file;
+          deleted_files.reserve(level_files.size());
           for (uint32_t j = 0; j < level_files.size(); j++) { // 87
             level_file = level_files[j];
             if (level_file->being_compacted) {
               continue;
             }
-            timer6.Start();
-            if (deleted_files.find(level_file) != deleted_files.end()) {
-              continue;
-            }
-            time6 += timer6.ElapsedNanos();
             timer7.Start();
             if (!include_end && end != nullptr &&
                 cfd->user_comparator()->Compare(level_file->largest.user_key(),
@@ -2511,7 +2508,7 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
             timer8.Start();
             edit.SetColumnFamily(cfd->GetID());
             edit.DeleteFile(i, level_file->fd.GetNumber());
-            deleted_files.insert(level_file);
+            deleted_files.push_back(level_file);
             level_file->being_compacted = true;
             time8 += timer8.ElapsedNanos();
           }
@@ -2535,6 +2532,7 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
           *cfd->GetLatestMutableCFOptions(), FlushReason::kDeleteFiles);
     }
       time4 += timer4.ElapsedNanos();
+    timer9.Start();
     {
       for (auto* deleted_file : deleted_files) {
         deleted_file->being_compacted = false;
@@ -2542,6 +2540,7 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
       input_version->Unref();
       FindObsoleteFiles(&job_context, false);
     }
+    time9 += timer9.ElapsedNanos();
   }  // lock released here
 
   timer5.Start();
@@ -2554,10 +2553,10 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
   time5 += timer5.ElapsedNanos();
 
   ROCKS_LOG_INFO(immutable_db_options_.info_log,
-                   "delete files cost: 1 %lf ms, 2 %lf ms, 21 %lf ms, 3 %lf ms, 4 %lf ms, 5 %lf ms, 6 %lf ms, 7 %lf ms, 8 %lf ms",
+                   "delete files cost: 1 %lf ms, 2 %lf ms, 21 %lf ms, 3 %lf ms, 4 %lf ms, 5 %lf ms, 6 %lf ms, 7 %lf ms, 8 %lf ms 9 %lf ms",
                     time1 * 1.0 / 1000000, time2 * 1.0 / 1000000, time21 * 1.0 / 1000000, time3 * 1.0 / 1000000,
                      time4 * 1.0 / 1000000, time5 * 1.0 / 1000000,
-                    time6 * 1.0 / 1000000, time7 * 1.0 / 1000000, time8 * 1.0 / 1000000
+                    time6 * 1.0 / 1000000, time7 * 1.0 / 1000000, time8 * 1.0 / 1000000, time9 * 1.0 / 1000000
                      );  
   LogFlush(immutable_db_options_.info_log);
 
