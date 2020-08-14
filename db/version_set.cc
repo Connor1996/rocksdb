@@ -2843,7 +2843,7 @@ Status VersionSet::ProcessManifestWrites(
     Directory* db_directory, bool new_descriptor_log,
     const ColumnFamilyOptions* new_cf_options, bool verbose) {
   assert(!writers.empty());
-  ManifestWriter& first_writer = writers.front();
+  ManifestWriter& first_writer = writers.front(); // 846
   ManifestWriter* last_writer = &first_writer;
 
   assert(!manifest_writers_.empty());
@@ -2905,7 +2905,7 @@ Status VersionSet::ProcessManifestWrites(
       // TODO(yanqin) maybe consider unordered_map
       Version* version = nullptr;
       VersionBuilder* builder = nullptr;
-      for (int i = 0; i != static_cast<int>(versions.size()); ++i) {
+      for (int i = 0; i != static_cast<int>(versions.size()); ++i) { // 908
         uint32_t cf_id = last_writer->cfd->GetID();
         if (versions[i]->cfd()->GetID() == cf_id) {
           version = versions[i];
@@ -2928,7 +2928,7 @@ Status VersionSet::ProcessManifestWrites(
         builder = builder_guards.back()->version_builder();
       }
       assert(builder != nullptr);  // make checker happy
-      for (const auto& e : last_writer->edit_list) {
+      for (const auto& e : last_writer->edit_list) { //  931
         if (e->is_in_atomic_group_) {
           if (batch_edits.empty() || !batch_edits.back()->is_in_atomic_group_ ||
               (batch_edits.back()->is_in_atomic_group_ &&
@@ -2949,7 +2949,7 @@ Status VersionSet::ProcessManifestWrites(
         batch_edits.push_back(e);
       }
     }
-    for (int i = 0; i < static_cast<int>(versions.size()); ++i) {
+    for (int i = 0; i < static_cast<int>(versions.size()); ++i) {  // 952
       assert(!builder_guards.empty() &&
              builder_guards.size() == versions.size());
       auto* builder = builder_guards[i]->version_builder();
@@ -3251,7 +3251,7 @@ Status VersionSet::LogAndApply(
     const autovector<autovector<VersionEdit*>>& edit_lists,
     InstrumentedMutex* mu, Directory* db_directory, bool new_descriptor_log,
     const ColumnFamilyOptions* new_cf_options, bool verbose) {
-  mu->AssertHeld();
+  mu->AssertHeld(); // 254
   int num_edits = 0;
   for (const auto& elist : edit_lists) {
     num_edits += static_cast<int>(elist.size());
@@ -3301,7 +3301,7 @@ Status VersionSet::LogAndApply(
     return first_writer.status;
   }
 
-  int num_undropped_cfds = 0;
+  int num_undropped_cfds = 0; // 304
   for (auto cfd : column_family_datas) {
     // if cfd == nullptr, it is a column family add.
     if (cfd == nullptr || !cfd->IsDropped()) {

@@ -2493,24 +2493,21 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
           timer21.Start();
           FileMetaData* level_file;
           deleted_files.reserve(level_files.size());
+          edit.ReserveDelete(level_files.size());
           for (uint32_t j = 0; j < level_files.size(); j++) { // 87
             level_file = level_files[j];
             if (level_file->being_compacted) {
               continue;
             }
-            timer7.Start();
-            if (!include_end && end != nullptr &&
+            if (j == level_files.size() - 1 && !include_end && end != nullptr &&
                 cfd->user_comparator()->Compare(level_file->largest.user_key(),
                                                 *end) == 0) {
               continue;
             }
-            time7 += timer7.ElapsedNanos();
-            timer8.Start();
             edit.SetColumnFamily(cfd->GetID());
             edit.DeleteFile(i, level_file->fd.GetNumber());
             deleted_files.push_back(level_file);
             level_file->being_compacted = true;
-            time8 += timer8.ElapsedNanos();
           }
           time21 += timer21.ElapsedNanos(); // 505
         }
