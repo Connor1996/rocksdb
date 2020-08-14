@@ -3023,7 +3023,7 @@ Status VersionSet::ProcessManifestWrites(
   }
 
   {
-    EnvOptions opt_env_opts = env_->OptimizeForManifestWrite(env_options_);
+    EnvOptions opt_env_opts = env_->OptimizeForManifestWrite(env_options_); // 26
     // begin
     StopWatchNano timer(Env::Default());
     if (verbose) {
@@ -3112,7 +3112,7 @@ Status VersionSet::ProcessManifestWrites(
 
     if (s.ok()) {
       // find offset in manifest file where this version is stored.
-      new_manifest_file_size = descriptor_log_->file()->GetFileSize();
+      new_manifest_file_size = descriptor_log_->file()->GetFileSize(); // 119
     }
 
     if (first_writer.edit_list.front()->is_column_family_drop_) {
@@ -3133,7 +3133,7 @@ Status VersionSet::ProcessManifestWrites(
 
   // Append the old manifest file to the obsolete_manifest_ list to be deleted
   // by PurgeObsoleteFiles later.
-  if (s.ok() && new_descriptor_log) {
+  if (s.ok() && new_descriptor_log) { // 126
     obsolete_manifests_.emplace_back(
         DescriptorFileName("", manifest_file_number_));
   }

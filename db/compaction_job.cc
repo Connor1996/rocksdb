@@ -719,7 +719,7 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
     status = InstallCompactionResults(mutable_cf_options);
   }
   VersionStorageInfo::LevelSummaryStorage tmp;
-  auto vstorage = cfd->current()->storage_info();
+  auto vstorage = cfd->current()->storage_info(); //
   const auto& stats = compaction_stats_;
 
   double read_write_amp = 0.0;
@@ -1427,7 +1427,7 @@ Status CompactionJob::FinishCompactionOutputFile(
 
 Status CompactionJob::InstallCompactionResults(
     const MutableCFOptions& mutable_cf_options) {
-  db_mutex_->AssertHeld();
+  db_mutex_->AssertHeld(); // 430
 
   auto* compaction = compact_->compaction;
   // paranoia: verify that the files that we started with
@@ -1452,7 +1452,7 @@ Status CompactionJob::InstallCompactionResults(
   }
 
   // Add compaction inputs
-  compaction->AddInputDeletions(compact_->compaction->edit());
+  compaction->AddInputDeletions(compact_->compaction->edit()); // 455
 
   for (const auto& sub_compact : compact_->sub_compact_states) {
     for (const auto& out : sub_compact.outputs) {

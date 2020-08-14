@@ -2441,15 +2441,20 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
   auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
   ColumnFamilyData* cfd = cfh->cfd();
   VersionEdit edit;
-  std::set<FileMetaData*> deleted_files;
+  std::unordered_set<FileMetaData*> deleted_files;
   JobContext job_context(next_job_id_.fetch_add(1), true);
     StopWatchNano timer1(Env::Default());
     StopWatchNano timer2(Env::Default());
     StopWatchNano timer3(Env::Default());
     StopWatchNano timer4(Env::Default());
     StopWatchNano timer5(Env::Default());
+    StopWatchNano timer21(Env::Default());
+    StopWatchNano timer6(Env::Default());
+    StopWatchNano timer7(Env::Default());
+    StopWatchNano timer8(Env::Default());
 
     uint64_t time1 =0, time2 =0, time3 =0, time4 =0, time5 =0; 
+    uint64_t time21 =0, time6 =0, time7 =0, time8 =0; 
   {
 
     InstrumentedMutexLock l(&mutex_);
@@ -2479,30 +2484,38 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
             end_key = &end_storage;
           }
           time1 += timer1.ElapsedNanos();
-          timer2.Start();
+          timer2.Start(); // 83
           vstorage->GetCleanInputsWithinInterval(
               i, begin_key, end_key, &level_files, -1 /* hint_index */,
               nullptr /* file_index */);
+          time2 += timer2.ElapsedNanos();
+          timer21.Start();
           FileMetaData* level_file;
-          for (uint32_t j = 0; j < level_files.size(); j++) {
+          for (uint32_t j = 0; j < level_files.size(); j++) { // 87
             level_file = level_files[j];
             if (level_file->being_compacted) {
               continue;
             }
+            timer6.Start();
             if (deleted_files.find(level_file) != deleted_files.end()) {
               continue;
             }
+            time6 += timer6.ElapsedNanos();
+            timer7.Start();
             if (!include_end && end != nullptr &&
                 cfd->user_comparator()->Compare(level_file->largest.user_key(),
                                                 *end) == 0) {
               continue;
             }
+            time7 += timer7.ElapsedNanos();
+            timer8.Start();
             edit.SetColumnFamily(cfd->GetID());
             edit.DeleteFile(i, level_file->fd.GetNumber());
             deleted_files.insert(level_file);
             level_file->being_compacted = true;
+            time8 += timer8.ElapsedNanos();
           }
-          time2 += timer2.ElapsedNanos();
+          time21 += timer21.ElapsedNanos(); // 505
         }
       }
     }
@@ -2541,7 +2554,11 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
   time5 += timer5.ElapsedNanos();
 
   ROCKS_LOG_INFO(immutable_db_options_.info_log,
-                   "delete files cost: 1 %lf ms, 2 %lf ms, 3 %lf ms, 4 %lf ms, 5 %lf ms", time1 * 1.0 / 1000000, time2 * 1.0 / 1000000, time3 * 1.0 / 1000000, time4 * 1.0 / 1000000, time5 * 1.0 / 1000000);  
+                   "delete files cost: 1 %lf ms, 2 %lf ms, 21 %lf ms, 3 %lf ms, 4 %lf ms, 5 %lf ms, 6 %lf ms, 7 %lf ms, 8 %lf ms",
+                    time1 * 1.0 / 1000000, time2 * 1.0 / 1000000, time21 * 1.0 / 1000000, time3 * 1.0 / 1000000,
+                     time4 * 1.0 / 1000000, time5 * 1.0 / 1000000,
+                    time6 * 1.0 / 1000000, time7 * 1.0 / 1000000, time8 * 1.0 / 1000000
+                     );  
   LogFlush(immutable_db_options_.info_log);
 
 

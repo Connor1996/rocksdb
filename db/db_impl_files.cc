@@ -49,7 +49,7 @@ uint64_t DBImpl::MinObsoleteSstNumberToKeep() {
 // force = true -- force the full scan
 void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
                                bool no_full_scan) {
-  mutex_.AssertHeld();
+  mutex_.AssertHeld(); // 12
 
   // if deletion is disabled, do nothing
   if (disable_delete_obsolete_files_ > 0) {
@@ -106,7 +106,7 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
   job_context->log_number = MinLogNumberToKeep();
   job_context->prev_log_number = versions_->prev_log_number();
 
-  versions_->AddLiveFiles(&job_context->sst_live);
+  versions_->AddLiveFiles(&job_context->sst_live); // 13
   if (doing_the_full_scan) {
     InfoLogPrefix info_log_prefix(!immutable_db_options_.db_log_dir.empty(),
         dbname_);
@@ -240,7 +240,7 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
   if (job_context->HaveSomethingToDelete()) {
     ++pending_purge_obsolete_files_;
   }
-  logs_to_free_.clear();
+  logs_to_free_.clear(); // 19
 }
 
 namespace {

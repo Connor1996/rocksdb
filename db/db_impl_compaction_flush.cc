@@ -2105,7 +2105,7 @@ void DBImpl::BackgroundCallCompaction(PrepickedCompaction* prepicked_compaction,
     // IngestExternalFile() calls to finish.
     WaitForIngestFile();
 
-    num_running_compactions_++;
+    num_running_compactions_++; // 1
 
     auto pending_outputs_inserted_elem =
         CaptureCurrentFileNumberInPendingOutputs();
@@ -2135,7 +2135,7 @@ void DBImpl::BackgroundCallCompaction(PrepickedCompaction* prepicked_compaction,
       mutex_.Lock();
     }
 
-    ReleaseFileNumberFromPendingOutputs(pending_outputs_inserted_elem);
+    ReleaseFileNumberFromPendingOutputs(pending_outputs_inserted_elem); // 3
 
     // If compaction failed, we want to delete all temporary files that we might
     // have created (they might not be all recorded in job_context in case of a
@@ -2152,17 +2152,17 @@ void DBImpl::BackgroundCallCompaction(PrepickedCompaction* prepicked_compaction,
       // released, the deconstructor of DB can kick in and destroy all the
       // states of DB so info_log might not be available after that point.
       // It also applies to access other states that DB owns.
-      log_buffer.FlushBufferToLog();
-      if (job_context.HaveSomethingToDelete()) {
+      log_buffer.FlushBufferToLog(); // 8
+      if (job_context.HaveSomethingToDelete()) { 
         PurgeObsoleteFiles(job_context);
         TEST_SYNC_POINT("DBImpl::BackgroundCallCompaction:PurgedObsoleteFiles");
       }
-      job_context.Clean();
+      job_context.Clean(); // 9
       mutex_.Lock();
     }
 
     assert(num_running_compactions_ > 0);
-    num_running_compactions_--;
+    num_running_compactions_--; // 10 
     if (bg_thread_pri == Env::Priority::LOW) {
       bg_compaction_scheduled_--;
     } else {
@@ -2173,7 +2173,7 @@ void DBImpl::BackgroundCallCompaction(PrepickedCompaction* prepicked_compaction,
     versions_->GetColumnFamilySet()->FreeDeadColumnFamilies();
 
     // See if there's more work to be done
-    MaybeScheduleFlushOrCompaction();
+    MaybeScheduleFlushOrCompaction(); // 11
     if (made_progress ||
         (bg_compaction_scheduled_ == 0 &&
          bg_bottom_compaction_scheduled_ == 0) ||
@@ -2516,26 +2516,26 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
         c->mutable_cf_options()->paranoid_file_checks,
         c->mutable_cf_options()->report_bg_io_stats, dbname_,
         &compaction_job_stats);
-    compaction_job.Prepare();
+    compaction_job.Prepare(); // 5
 
     NotifyOnCompactionBegin(c->column_family_data(), c.get(), status,
-                            compaction_job_stats, job_context->job_id);
+                            compaction_job_stats, job_context->job_id); // 4
 
-    mutex_.Unlock();
+    mutex_.Unlock(); // 24
     compaction_job.Run();
     TEST_SYNC_POINT("DBImpl::BackgroundCompaction:NonTrivial:AfterRun");
-    mutex_.Lock();
+    mutex_.Lock(); // 27
 
-    status = compaction_job.Install(*c->mutable_cf_options());
+    status = compaction_job.Install(*c->mutable_cf_options()); // 6
     if (status.ok()) {
       InstallSuperVersionAndScheduleWork(
           c->column_family_data(), &job_context->superversion_contexts[0],
-          *c->mutable_cf_options(), FlushReason::kAutoCompaction);
+          *c->mutable_cf_options(), FlushReason::kAutoCompaction); // 33
     }
     *made_progress = true;
   }
   if (c != nullptr) {
-    c->ReleaseCompactionFiles(status);
+    c->ReleaseCompactionFiles(status); //38
     *made_progress = true;
 
 #ifndef ROCKSDB_LITE
@@ -2548,7 +2548,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
 #endif  // ROCKSDB_LITE
 
     NotifyOnCompactionCompleted(c->column_family_data(), c.get(), status,
-                                compaction_job_stats, job_context->job_id);
+                                compaction_job_stats, job_context->job_id); // 7
   }
 
   if (status.ok() || status.IsCompactionTooLarge()) {
