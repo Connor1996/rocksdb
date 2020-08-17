@@ -312,6 +312,7 @@ class VersionBuilder::Rep {
     if (!s.ok()) {
       return s;
     }
+    levels_[num_levels_ - 1].deleted_files.reserve(del.size());
     for (const auto& del_file : del) {
       const auto level = del_file.first;
       const auto number = del_file.second;

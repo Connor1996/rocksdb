@@ -95,6 +95,7 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
   // Mark the elements in job_context->sst_delete_files as grabbedForPurge
   // so that other threads calling FindObsoleteFiles with full_scan=true
   // will not add these files to candidate list for purge.
+  files_grabbed_for_purge_.reserve(job_context->sst_delete_files.size()); 
   for (const auto& sst_to_del : job_context->sst_delete_files) { // 98
     MarkAsGrabbedForPurge(sst_to_del.metadata->fd.GetNumber());
   }
