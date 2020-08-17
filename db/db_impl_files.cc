@@ -83,7 +83,7 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
     job_context->min_pending_output = *pending_outputs_.begin();
   } else {
     // delete all of them
-    job_context->min_pending_output = std::numeric_limits<uint64_t>::max();
+    job_context->min_pending_output = std::numeric_limits<uint64_t>::max(); // 86
   }
 
   // Get obsolete files.  This function will also update the list of
@@ -95,7 +95,7 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
   // Mark the elements in job_context->sst_delete_files as grabbedForPurge
   // so that other threads calling FindObsoleteFiles with full_scan=true
   // will not add these files to candidate list for purge.
-  for (const auto& sst_to_del : job_context->sst_delete_files) {
+  for (const auto& sst_to_del : job_context->sst_delete_files) { // 98
     MarkAsGrabbedForPurge(sst_to_del.metadata->fd.GetNumber());
   }
 
@@ -104,7 +104,7 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
   job_context->pending_manifest_file_number =
       versions_->pending_manifest_file_number();
   job_context->log_number = MinLogNumberToKeep();
-  job_context->prev_log_number = versions_->prev_log_number();
+  job_context->prev_log_number = versions_->prev_log_number(); // 107
 
   versions_->AddLiveFiles(&job_context->sst_live); // 13
   if (doing_the_full_scan) {
@@ -132,6 +132,7 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
       }
     }
 
+    std::sort(files_grabbed_for_purge_.begin(), files_grabbed_for_purge_.end());
     for (auto& path : paths) {
       // set of all files in the directory. We'll exclude files that are still
       // alive in the subsequent processings.
@@ -496,15 +497,13 @@ void DBImpl::PurgeObsoleteFiles(JobContext& state, bool schedule_only) {
     // After purging obsolete files, remove them from files_grabbed_for_purge_.
     // Use a temporary vector to perform bulk deletion via swap.
     InstrumentedMutexLock guard_lock(&mutex_);
-    autovector<uint64_t> to_be_removed;
+    std::vector<uint64_t> tmp;
     for (auto fn : files_grabbed_for_purge_) {
-      if (files_to_del.count(fn) != 0) {
-        to_be_removed.emplace_back(fn);
+      if (files_to_del.count(fn) == 0) {
+        tmp.emplace_back(fn);
       }
     }
-    for (auto fn : to_be_removed) {
-      files_grabbed_for_purge_.erase(fn);
-    }
+    files_grabbed_for_purge_.swap(tmp);
   }
 
   // Delete old info log files.

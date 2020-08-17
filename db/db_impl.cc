@@ -2521,7 +2521,7 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
     input_version->Ref();
     status = versions_->LogAndApply(cfd, *cfd->GetLatestMutableCFOptions(),
                                     &edit, &mutex_, directories_.GetDbDir(), false, nullptr, true);
-      time3 += timer3.ElapsedNanos();
+      time3 += timer3.ElapsedNanos(); // 24
       timer4.Start();
     if (status.ok()) {
       InstallSuperVersionAndScheduleWork(
@@ -2534,13 +2534,13 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
       for (auto* deleted_file : deleted_files) {
         deleted_file->being_compacted = false;
       }
-      input_version->Unref();
+      input_version->Unref(); // 37
       FindObsoleteFiles(&job_context, false);
     }
     time9 += timer9.ElapsedNanos();
   }  // lock released here
 
-  timer5.Start();
+  timer5.Start(); // 43
   // remove files outside the db-lock
   if (job_context.HaveSomethingToDelete()) {
     // Call PurgeObsoleteFiles() without holding mutex.

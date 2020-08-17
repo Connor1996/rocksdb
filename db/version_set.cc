@@ -2843,7 +2843,7 @@ Status VersionSet::ProcessManifestWrites(
     Directory* db_directory, bool new_descriptor_log,
     const ColumnFamilyOptions* new_cf_options, bool verbose) {
   assert(!writers.empty());
-  ManifestWriter& first_writer = writers.front(); // 846
+  ManifestWriter& first_writer = writers.front();
   ManifestWriter* last_writer = &first_writer;
 
   assert(!manifest_writers_.empty());
@@ -2861,7 +2861,7 @@ Status VersionSet::ProcessManifestWrites(
   } else {
     auto it = manifest_writers_.cbegin();
     size_t group_start = std::numeric_limits<size_t>::max();
-    while (it != manifest_writers_.cend()) {
+    while (it != manifest_writers_.cend()) { //864
       if ((*it)->edit_list.front()->IsColumnFamilyManipulation()) {
         // no group commits for column family add or drop
         break;
@@ -2946,7 +2946,7 @@ Status VersionSet::ProcessManifestWrites(
           }
           return s;
         }
-        batch_edits.push_back(e);
+        batch_edits.push_back(e); // 949
       }
     }
     for (int i = 0; i < static_cast<int>(versions.size()); ++i) {  // 952
