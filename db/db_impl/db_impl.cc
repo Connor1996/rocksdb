@@ -3678,6 +3678,7 @@ Status DBImpl::IngestExternalFiles(
       return Status::InvalidArgument(err_msg);
     }
   }
+  bool allow_newer_writes = true;
   for (const auto& arg : args) {
     const IngestExternalFileOptions& ingest_opts = arg.options;
     if (ingest_opts.ingest_behind &&
@@ -3685,6 +3686,7 @@ Status DBImpl::IngestExternalFiles(
       return Status::InvalidArgument(
           "can't ingest_behind file in DB with allow_ingest_behind=false");
     }
+    allow_newer_writes &= ingest_opts.allow_newer_writes;
   }
 
   // TODO (yanqin) maybe handle the case in which column_families have
@@ -3860,6 +3862,19 @@ Status DBImpl::IngestExternalFiles(
         versions_->SetLastPublishedSequence(last_seqno + 1);
         versions_->SetLastSequence(last_seqno + 1);
       }
+    }
+
+    // The following LogAndApply() can cause very high latency up to seconds. If
+    // newer writes are allowed, we can resume writes early once the last
+    // sequence has been published.
+    if (allow_newer_writes) {
+      if (two_write_queues_) {
+        nonmem_write_thread_.ExitUnbatched(&nonmem_w);
+      }
+      write_thread_.ExitUnbatched(&w);
+    }
+
+    if (status.ok()) {
       autovector<ColumnFamilyData*> cfds_to_commit;
       autovector<const MutableCFOptions*> mutable_cf_options_list;
       autovector<autovector<VersionEdit*>> edit_lists;
@@ -3911,10 +3926,12 @@ Status DBImpl::IngestExternalFiles(
     }
 
     // Resume writes to the DB
-    if (two_write_queues_) {
-      nonmem_write_thread_.ExitUnbatched(&nonmem_w);
+    if (!allow_newer_writes) {
+      if (two_write_queues_) {
+        nonmem_write_thread_.ExitUnbatched(&nonmem_w);
+      }
+      write_thread_.ExitUnbatched(&w);
     }
-    write_thread_.ExitUnbatched(&w);
 
     if (status.ok()) {
       for (auto& job : ingestion_jobs) {
