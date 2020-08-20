@@ -2441,7 +2441,7 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
   auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
   ColumnFamilyData* cfd = cfh->cfd();
   VersionEdit edit;
-  std::vector<FileMetaData*> deleted_files;
+  std::vector<std::pair<FileMetaData*, int>> deleted_files;
   JobContext job_context(next_job_id_.fetch_add(1), true);
     StopWatchNano timer1(Env::Default());
     StopWatchNano timer2(Env::Default());
@@ -2492,8 +2492,8 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
           time2 += timer2.ElapsedNanos();
           timer21.Start();
           FileMetaData* level_file;
-          deleted_files.reserve(level_files.size());
-          edit.ReserveDelete(level_files.size());
+          deleted_files.reserve(deleted_files.size() + level_files.size());
+          edit.SetColumnFamily(cfd->GetID());
           for (uint32_t j = 0; j < level_files.size(); j++) { // 87
             level_file = level_files[j];
             if (level_file->being_compacted) {
@@ -2504,16 +2504,25 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
                                                 *end) == 0) {
               continue;
             }
-            edit.SetColumnFamily(cfd->GetID());
-            edit.DeleteFile(i, level_file->fd.GetNumber());
-            deleted_files.push_back(level_file);
+            deleted_files.emplace_back(std::pair(level_file, i));
             level_file->being_compacted = true;
           }
           time21 += timer21.ElapsedNanos(); // 505
         }
       }
     }
-      timer3.Start();
+    timer3.Start();
+    if (n > 1) {
+      // deduplicate the files because multiple ranges may cover same file.
+      auto cmp = [](std::pair<FileMetaData*, int>& p1, std::pair<FileMetaData*, int>& p2) {
+        return p1.first->fd.GetNumber() < p2.first->fd.GetNumber();
+      };
+      std::sort(deleted_files.begin(), deleted_files.end(), cmp);
+      std::unique(deleted_files.begin(), deleted_files.end());
+    }
+    for (const auto& delete_file : deleted_files) {
+        edit.DeleteFile(delete_file.second, delete_file.first->fd.GetNumber());
+    }
     if (edit.GetDeletedFiles().empty()) {
       job_context.Clean();
       return Status::OK();
@@ -2528,11 +2537,11 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
           cfd, &job_context.superversion_contexts[0],
           *cfd->GetLatestMutableCFOptions(), FlushReason::kDeleteFiles);
     }
-      time4 += timer4.ElapsedNanos();
+    time4 += timer4.ElapsedNanos();
     timer9.Start();
     {
-      for (auto* deleted_file : deleted_files) {
-        deleted_file->being_compacted = false;
+      for (const auto& deleted_file : deleted_files) {
+        deleted_file.first->being_compacted = false;
       }
       input_version->Unref(); // 37
       FindObsoleteFiles(&job_context, false);
