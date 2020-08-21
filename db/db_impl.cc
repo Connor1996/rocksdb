@@ -2464,8 +2464,8 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
       auto* vstorage = input_version->storage_info();
       for (size_t r = 0; r < n; r++) {
         auto begin = ranges[r].start, end = ranges[r].limit;
+        timer1.Start();
         for (int i = 1; i < cfd->NumberLevels(); i++) {
-          timer1.Start();
           if (vstorage->LevelFiles(i).empty() ||
               !vstorage->OverlapInLevel(i, begin, end)) {
             continue;
@@ -2484,13 +2484,9 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
             end_storage.SetMaxPossibleForUserKey(*end);
             end_key = &end_storage;
           }
-          time1 += timer1.ElapsedNanos();
-          timer2.Start(); // 83
           vstorage->GetCleanInputsWithinInterval(
               i, begin_key, end_key, &level_files, -1 /* hint_index */,
               nullptr /* file_index */);
-          time2 += timer2.ElapsedNanos();
-          timer21.Start();
           FileMetaData* level_file;
           deleted_files.reserve(deleted_files.size() + level_files.size());
           edit.SetColumnFamily(cfd->GetID());
@@ -2504,21 +2500,24 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
                                                 *end) == 0) {
               continue;
             }
-            deleted_files.emplace_back(std::pair(level_file, i));
+            deleted_files.emplace_back(std::make_pair(level_file, i));
             level_file->being_compacted = true;
           }
-          time21 += timer21.ElapsedNanos(); // 505
         }
+        time1 += timer1.ElapsedNanos();
       }
     }
     timer3.Start();
     if (n > 1) {
       // deduplicate the files because multiple ranges may cover same file.
-      auto cmp = [](std::pair<FileMetaData*, int>& p1, std::pair<FileMetaData*, int>& p2) {
+      auto cmp = [](const std::pair<FileMetaData*, int>& p1, const std::pair<FileMetaData*, int>& p2) {
         return p1.first->fd.GetNumber() < p2.first->fd.GetNumber();
       };
+      auto pred = [](const std::pair<FileMetaData*, int>& p1, const std::pair<FileMetaData*, int>& p2) {
+        return p1.first->fd.GetNumber() == p2.first->fd.GetNumber();
+      };
       std::sort(deleted_files.begin(), deleted_files.end(), cmp);
-      std::unique(deleted_files.begin(), deleted_files.end());
+      std::unique(deleted_files.begin(), deleted_files.end(), pred);
     }
     for (const auto& delete_file : deleted_files) {
         edit.DeleteFile(delete_file.second, delete_file.first->fd.GetNumber());
@@ -2528,10 +2527,10 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
       return Status::OK();
     }
     input_version->Ref();
+    time3 += timer3.ElapsedNanos(); // 24
+    timer4.Start();
     status = versions_->LogAndApply(cfd, *cfd->GetLatestMutableCFOptions(),
                                     &edit, &mutex_, directories_.GetDbDir(), false, nullptr, true);
-      time3 += timer3.ElapsedNanos(); // 24
-      timer4.Start();
     if (status.ok()) {
       InstallSuperVersionAndScheduleWork(
           cfd, &job_context.superversion_contexts[0],

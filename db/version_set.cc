@@ -2938,7 +2938,19 @@ Status VersionSet::ProcessManifestWrites(
         } else if (group_start != std::numeric_limits<size_t>::max()) {
           group_start = std::numeric_limits<size_t>::max();
         }
+
+        StopWatchNano timer(Env::Default());
+        if (verbose) {
+          timer.Start();
+        }
         Status s = LogAndApplyHelper(last_writer->cfd, builder, version, e, mu);
+        if (verbose) {
+          auto time = timer.ElapsedNanos();
+          ROCKS_LOG_INFO(db_options_->info_log,
+                   "edit apply cost: %lf ms",
+                    time * 1.0 / 1000000
+                  );  
+        }
         if (!s.ok()) {
           // free up the allocated memory
           for (auto v : versions) {
