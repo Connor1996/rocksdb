@@ -313,14 +313,16 @@ class VersionBuilder::Rep {
       return s;
     }
     levels_[num_levels_ - 1].deleted_files.reserve(del.size());
-    for (const auto& del_file : del) {
+    levels_[num_levels_ - 2].deleted_files.reserve(del.size() / 5);
+    levels_[num_levels_ - 3].deleted_files.reserve(del.size() / 25);
+    for (const auto& del_file : del) {  // 16
       const auto level = del_file.first;
-      const auto number = del_file.second;
+      const auto number = del_file.second; // 136
       if (level < num_levels_) {
         levels_[level].deleted_files.insert(number);
         auto existing = levels_[level].added_files.find(number);
         if (existing != levels_[level].added_files.end()) {
-          UnrefFile(existing->second);
+          UnrefFile(existing->second); // 23
           levels_[level].added_files.erase(existing);
         }
       } else {
