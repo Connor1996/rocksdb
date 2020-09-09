@@ -540,6 +540,22 @@ Status ExternalSstFileIngestionJob::AssignLevelAndSeqnoForIngestedFile(
       target_level = lvl;
     }
   }
+
+  auto origin_target_level = target_level;
+  while (target_level >= vstorage->base_level()) {
+    if (vstorage->MaxBytesForLevel(target_level) <= file_to_ingest->file_size + vstorage->NumLevelBytes(target_level) &&
+      !IngestedFileFitInLevel(file_to_ingest, target_level)) {
+      target_level--;
+    } else {
+      break;
+    }
+  }
+
+  if (target_level == 0) {
+    target_level = origin_target_level;
+  } else if (target_level < vstorage->base_level()) {
+    ROCKS_LOG_INFO(db_options_.info_log, "ingest before base level %d", vstorage->base_level());
+  }
  TEST_SYNC_POINT_CALLBACK(
       "ExternalSstFileIngestionJob::AssignLevelAndSeqnoForIngestedFile",
       &overlap_with_db);
@@ -640,12 +656,14 @@ bool ExternalSstFileIngestionJob::IngestedFileFitInLevel(
                                &file_largest_user_key)) {
     // File overlap with another files in this level, we cannot
     // add it to this level
+    ROCKS_LOG_INFO(db_options_.info_log, "range overlap in L%d", level);
     return false;
   }
   if (cfd_->RangeOverlapWithCompaction(file_smallest_user_key,
                                        file_largest_user_key, level)) {
     // File overlap with a running compaction output that will be stored
     // in this level, we cannot add this file to this level
+    ROCKS_LOG_INFO(db_options_.info_log, "compaction overlap in L%d", level);
     return false;
   }
 

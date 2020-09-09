@@ -3141,6 +3141,7 @@ void VersionStorageInfo::CalculateBaseBytes(const ImmutableCFOptions& ioptions,
     uint64_t max_level_size = 0;
 
     int first_non_empty_level = -1;
+    int max_size_level = -1;
     // Find size of non-L0 level of most data.
     // Cannot use the size of the last level because it can be empty or less
     // than previous levels after compaction.
@@ -3154,6 +3155,7 @@ void VersionStorageInfo::CalculateBaseBytes(const ImmutableCFOptions& ioptions,
       }
       if (total_size > max_level_size) {
         max_level_size = total_size;
+        max_size_level = i;
       }
     }
 
@@ -3179,7 +3181,7 @@ void VersionStorageInfo::CalculateBaseBytes(const ImmutableCFOptions& ioptions,
 
       // Try whether we can make last level's target size to be max_level_size
       uint64_t cur_level_size = max_level_size;
-      for (int i = num_levels_ - 2; i >= first_non_empty_level; i--) {
+      for (int i = max_size_level - 1; i >= first_non_empty_level; i--) {
         // Round up after dividing
         cur_level_size = static_cast<uint64_t>(
             cur_level_size / options.max_bytes_for_level_multiplier);
