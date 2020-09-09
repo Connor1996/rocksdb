@@ -543,8 +543,9 @@ Status ExternalSstFileIngestionJob::AssignLevelAndSeqnoForIngestedFile(
 
   auto origin_target_level = target_level;
   while (target_level >= vstorage->base_level()) {
-    if (vstorage->MaxBytesForLevel(target_level) <= file_to_ingest->file_size + vstorage->NumLevelBytes(target_level) &&
+    if (vstorage->MaxBytesForLevel(target_level) <= file_to_ingest->file_size + vstorage->NumLevelBytes(target_level) || 
       !IngestedFileFitInLevel(file_to_ingest, target_level)) {
+      ROCKS_LOG_INFO(db_options_.info_log, "ingest bytes %lu %lu exceed level size %lu for level %d", file_to_ingest->file_size, vstorage->NumLevelBytes(target_level), vstorage->MaxBytesForLevel(target_level), target_level);
       target_level--;
     } else {
       break;
