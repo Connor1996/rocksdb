@@ -191,6 +191,8 @@ bool VersionEdit::EncodeTo(std::string* dst) const {
                                dst);
 
       PutVarint32(dst, CustomTag::kTerminate);
+
+      // TODO: add ingested file to version edit
     }
   }
 
