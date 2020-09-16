@@ -1470,7 +1470,7 @@ struct IngestExternalFileOptions {
   bool failed_move_fall_back_to_copy = true;
   // If set to false, an ingested file keys could appear in existing snapshots
   // that where created before the file was ingested.
-  bool snapshot_consistency = true;
+  bool snapshot_consistency = false;
   // If set to false, IngestExternalFile() will fail if the file key range
   // overlaps with existing keys or tombstones in the DB.
   bool allow_global_seqno = true;
@@ -1497,7 +1497,7 @@ struct IngestExternalFileOptions {
   // 1. No extra random write for global_seqno during ingestion.
   // 2. Without writing external SST file, it's possible to do checksum.
   // We have a plan to set this option to false by default in the future.
-  bool write_global_seqno = true;
+  bool write_global_seqno = false;
   // Set to true if you would like to verify the checksums of each block of the
   // external SST file before ingestion.
   // Warning: setting this to true causes slowdown in file ingestion because
@@ -1512,7 +1512,7 @@ struct IngestExternalFileOptions {
   // overwrite data overlapped with the ingested files. For example,
   // applications can apply upper level concurrency control that disallow writes
   // to the same range with ingesting files.
-  bool allow_newer_writes = false;
+  bool allow_newer_writes = true;
 };
 
 enum TraceFilterType : uint64_t {
