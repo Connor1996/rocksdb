@@ -507,10 +507,11 @@ struct BlockBasedTableOptions {
     kDisable,
     // Prepopulate blocks during flush only.
     kFlushOnly,
+    kFlushAndL0,
   };
 
   PrepopulateBlockCache prepopulate_block_cache =
-      PrepopulateBlockCache::kDisable;
+      PrepopulateBlockCache::kFlushOnly;
 };
 
 // Table Properties that are specific to block-based table properties.

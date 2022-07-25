@@ -1257,7 +1257,7 @@ void BlockBasedTableBuilder::WriteRawBlock(const Slice& block_contents,
       bool warm_cache;
       switch (r->table_options.prepopulate_block_cache) {
         case BlockBasedTableOptions::PrepopulateBlockCache::kFlushOnly:
-          warm_cache = (r->reason == TableFileCreationReason::kFlush);
+          warm_cache = true;
           break;
         case BlockBasedTableOptions::PrepopulateBlockCache::kDisable:
           warm_cache = false;
