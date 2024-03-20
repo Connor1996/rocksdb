@@ -1285,7 +1285,11 @@ Status DBImpl::PreprocessWrite(const WriteOptions& write_options,
   }
 
   PERF_TIMER_GUARD(write_scheduling_flushes_compactions_time);
-
+  ROCKS_LOG_INFO(immutable_db_options_.info_log,
+                 "!!!PreprocessWrite: total_log_size_ %" PRIu64
+                 "max_total_wal_size_ %" PRIu64,
+                 total_log_size_.load(std::memory_order_relaxed),
+                 GetMaxTotalWalSize());
   if (UNLIKELY(status.ok() && total_log_size_ > GetMaxTotalWalSize())) {
     assert(versions_);
     InstrumentedMutexLock l(&mutex_);
@@ -1434,6 +1438,7 @@ IOStatus DBImpl::WriteToWAL(const WriteBatch& merged_batch,
                             uint64_t* log_size,
                             LogFileNumberSize& log_file_number_size) {
   assert(log_size != nullptr);
+  TEST_SYNC_POINT("DBImpl::WriteToWAL");
 
   Slice log_entry = WriteBatchInternal::Contents(&merged_batch);
   *log_size = log_entry.size();
@@ -2160,6 +2165,12 @@ Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context) {
       log_empty_ = true;
       log_dir_synced_ = false;
       logs_.emplace_back(logfile_number_, new_log);
+      ROCKS_LOG_INFO(immutable_db_options_.info_log,
+                     "!!![%s] Switched to new WAL file #%" PRIu64
+                     " with recycle log #%" PRIu64
+                     " and logs size %" ROCKSDB_PRIszt,
+                     cfd->GetName().c_str(), logfile_number_,
+                     recycle_log_number, logs_.size());
       alive_log_files_.push_back(LogFileNumberSize(logfile_number_));
     }
   }

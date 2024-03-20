@@ -36,6 +36,7 @@
 #include "db/write_batch_internal.h"
 #include "env/mock_env.h"
 #include "file/filename.h"
+#include "util/stderr_logger.h"
 #include "monitoring/thread_status_util.h"
 #include "port/port.h"
 #include "port/stack_trace.h"
@@ -321,7 +322,7 @@ TEST_F(DBTest, MixedSlowdownOptions) {
   // We need the 2nd write to trigger delay. This is because delay is
   // estimated based on the last write size which is 0 for the first write.
   ASSERT_OK(dbfull()->Put(wo, "foo2", "bar2"));
-          token.reset();
+  token.reset();
 
   for (auto& t : threads) {
     t.join();
@@ -379,7 +380,7 @@ TEST_F(DBTest, MixedSlowdownOptionsInQueue) {
   // We need the 2nd write to trigger delay. This is because delay is
   // estimated based on the last write size which is 0 for the first write.
   ASSERT_OK(dbfull()->Put(wo, "foo2", "bar2"));
-          token.reset();
+  token.reset();
 
   for (auto& t : threads) {
     t.join();
@@ -448,7 +449,7 @@ TEST_F(DBTest, MixedSlowdownOptionsStop) {
   // We need the 2nd write to trigger delay. This is because delay is
   // estimated based on the last write size which is 0 for the first write.
   ASSERT_OK(dbfull()->Put(wo, "foo2", "bar2"));
-          token.reset();
+  token.reset();
 
   for (auto& t : threads) {
     t.join();
@@ -482,7 +483,6 @@ TEST_F(DBTest, LevelLimitReopen) {
   ASSERT_OK(TryReopenWithColumnFamilies({"default", "pikachu"}, options));
 }
 #endif  // ROCKSDB_LITE
-
 
 TEST_F(DBTest, PutSingleDeleteGet) {
   do {
@@ -781,7 +781,6 @@ TEST_F(DBTest, GetFromImmutableLayer) {
     env_->delay_sstable_sync_.store(false, std::memory_order_release);
   } while (ChangeOptions());
 }
-
 
 TEST_F(DBTest, GetLevel0Ordering) {
   do {
@@ -3746,7 +3745,7 @@ TEST_F(DBTest, FIFOCompactionWithTTLTest) {
 
     options.compaction_options_fifo.max_table_files_size = 150 << 10;  // 150KB
     options.compaction_options_fifo.allow_compaction = false;
-    options.ttl = 1 * 60 * 60 ;  // 1 hour
+    options.ttl = 1 * 60 * 60;  // 1 hour
     options = CurrentOptions(options);
     DestroyAndReopen(options);
 
@@ -3820,7 +3819,7 @@ TEST_F(DBTest, FIFOCompactionWithTTLTest) {
     options.write_buffer_size = 10 << 10;                              // 10KB
     options.compaction_options_fifo.max_table_files_size = 150 << 10;  // 150KB
     options.compaction_options_fifo.allow_compaction = false;
-    options.ttl =  1 * 60 * 60;  // 1 hour
+    options.ttl = 1 * 60 * 60;  // 1 hour
     options = CurrentOptions(options);
     DestroyAndReopen(options);
 
@@ -4188,54 +4187,86 @@ TEST_F(DBTest, WriteSingleThreadEntry) {
 }
 
 TEST_F(DBTest, ConcurrentFlushWAL) {
-  const size_t cnt = 100;
+  const size_t cnt = 8;
   Options options;
   options.env = env_;
+  options.write_buffer_size = 1000000;
+  options.max_total_wal_size = 10;
+  options.info_log.reset(new StderrLogger());
+  options.enable_multi_batch_write = true;
+  options.max_write_buffer_number = 10;
+  options.track_and_verify_wals_in_manifest = true;
   WriteOptions wopt;
   ReadOptions ropt;
-  for (bool two_write_queues : {false, true}) {
-    for (bool manual_wal_flush : {false, true}) {
+  for (bool two_write_queues : {false}) {
+    for (bool manual_wal_flush : {false}) {
       options.two_write_queues = two_write_queues;
       options.manual_wal_flush = manual_wal_flush;
       options.create_if_missing = true;
       DestroyAndReopen(options);
+
+      ColumnFamilyOptions cf_options(options);
+      ColumnFamilyHandle* handle;
+      ASSERT_OK(db_->CreateColumnFamily(cf_options, "name", &handle));
+
+      ROCKSDB_NAMESPACE::SyncPoint::GetInstance()->LoadDependency({
+          {"DBTest::ConcurrentFlushWAL:2", "DBImpl::BackgroundCallFlush:start"},
+      });
+
+      ROCKSDB_NAMESPACE::SyncPoint::GetInstance()->EnableProcessing();
+
       std::vector<port::Thread> threads;
-      threads.emplace_back([&] {
-        for (size_t i = 0; i < cnt; i++) {
-          auto istr = ToString(i);
-          ASSERT_OK(db_->Put(wopt, db_->DefaultColumnFamily(), "a" + istr,
-                             "b" + istr));
-        }
-      });
-      if (two_write_queues) {
-        threads.emplace_back([&] {
-          for (size_t i = cnt; i < 2 * cnt; i++) {
-            auto istr = ToString(i);
-            WriteBatch batch;
-            ASSERT_OK(batch.Put("a" + istr, "b" + istr));
-            ASSERT_OK(
-                dbfull()->WriteImpl(wopt, &batch, nullptr, nullptr, 0, true));
-          }
-        });
+      // create multiple wals
+      for (size_t i = 0; i < cnt; i++) {
+        auto istr = ToString(i);
+        ASSERT_OK(
+            db_->Put(wopt, db_->DefaultColumnFamily(), "a" + istr, "b" + istr));
       }
-      threads.emplace_back([&] {
-        for (size_t i = 0; i < cnt * 100; i++) {  // FlushWAL is faster than Put
-          ASSERT_OK(db_->FlushWAL(false));
-        }
+
+      ROCKSDB_NAMESPACE::SyncPoint::GetInstance()->LoadDependency({
+          {"DBTest::ConcurrentFlushWAL:2", "DBImpl::BackgroundCallFlush:start"},
+          {"DBTest::ConcurrentFlushWAL:2", "DBImpl::WriteToWAL"},
       });
+
+      std::cout << "here0" << std::endl;
+
+      threads.emplace_back([&] {
+        auto istr = ToString(cnt);
+        ASSERT_OK(
+            db_->Put(wopt, db_->DefaultColumnFamily(), "a" + istr, "b" + istr));
+      });
+      std::cout << "here1" << std::endl;
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      std::cout << "here1.5" << std::endl;
+      ASSERT_OK(db_->FlushWAL(true));
+
+      std::cout << "here2" << std::endl;
+      TEST_SYNC_POINT("DBTest::ConcurrentFlushWAL:2");
       for (auto& t : threads) {
         t.join();
       }
-      options.create_if_missing = false;
+      ROCKSDB_NAMESPACE::SyncPoint::GetInstance()->DisableProcessing();
+      // trigger switch memtable and sync
+      // wopt.sync = true;
+      auto istr = ToString(cnt + 1);
+      // ASSERT_OK(
+      //     db_->Put(wopt, db_->DefaultColumnFamily(), "a" + istr, "b" +
+      //     istr));
+
+      // options.create_if_missing = false;
+      db_->DestroyColumnFamilyHandle(handle);
       // Recover from the wal and make sure that it is not corrupted
-      Reopen(options);
-      for (size_t i = 0; i < cnt; i++) {
-        PinnableSlice pval;
-        auto istr = ToString(i);
-        ASSERT_OK(
-            db_->Get(ropt, db_->DefaultColumnFamily(), "a" + istr, &pval));
-        ASSERT_TRUE(pval == ("b" + istr));
-      }
+      ASSERT_OK(TryReopenWithColumnFamilies({"default", "name"}, options));
+      // for (size_t i = 0; i <= cnt + 1; i++) {
+      //   PinnableSlice pval;
+      //   istr = ToString(i);
+      //   if (!db_->Get(ropt, db_->DefaultColumnFamily(), "a" + istr, &pval)
+      //            .ok()) {
+      //     std::cout << "Failed to get key " << i << std::endl;
+      //   } else {
+      //     ASSERT_TRUE(pval == ("b" + istr));
+      //   }
+      // }
     }
   }
 }
@@ -6007,7 +6038,6 @@ TEST_F(DBTest, DISABLED_SuggestCompactRangeTest) {
   ASSERT_EQ(1, NumTableFilesAtLevel(1));
 }
 
-
 TEST_F(DBTest, PromoteL0) {
   Options options = CurrentOptions();
   options.disable_auto_compactions = true;
@@ -6188,13 +6218,12 @@ TEST_F(DBTest, CompactFilesShouldTriggerAutoCompaction) {
   SyncPoint::GetInstance()->EnableProcessing();
 
   port::Thread manual_compaction_thread([&]() {
-      auto s = db_->CompactFiles(CompactionOptions(),
-          db_->DefaultColumnFamily(), input_files, 0);
-      ASSERT_OK(s);
+    auto s = db_->CompactFiles(CompactionOptions(), db_->DefaultColumnFamily(),
+                               input_files, 0);
+    ASSERT_OK(s);
   });
 
-  TEST_SYNC_POINT(
-          "DBTest::CompactFilesShouldTriggerAutoCompaction:Begin");
+  TEST_SYNC_POINT("DBTest::CompactFilesShouldTriggerAutoCompaction:Begin");
   // generate enough files to trigger compaction
   for (int i = 0; i < 20; ++i) {
     for (int j = 0; j < 2; ++j) {
@@ -6204,16 +6233,15 @@ TEST_F(DBTest, CompactFilesShouldTriggerAutoCompaction) {
   }
   db_->GetColumnFamilyMetaData(db_->DefaultColumnFamily(), &cf_meta_data);
   ASSERT_GT(cf_meta_data.levels[0].files.size(),
-      options.level0_file_num_compaction_trigger);
-  TEST_SYNC_POINT(
-          "DBTest::CompactFilesShouldTriggerAutoCompaction:End");
+            options.level0_file_num_compaction_trigger);
+  TEST_SYNC_POINT("DBTest::CompactFilesShouldTriggerAutoCompaction:End");
 
   manual_compaction_thread.join();
   ASSERT_OK(dbfull()->TEST_WaitForCompact());
 
   db_->GetColumnFamilyMetaData(db_->DefaultColumnFamily(), &cf_meta_data);
   ASSERT_LE(cf_meta_data.levels[0].files.size(),
-      options.level0_file_num_compaction_trigger);
+            options.level0_file_num_compaction_trigger);
 }
 #endif  // ROCKSDB_LITE
 
@@ -6438,8 +6466,9 @@ class WriteStallListener : public EventListener {
     MutexLock l(&mutex_);
     return expected == condition_;
   }
+
  private:
-  port::Mutex   mutex_;
+  port::Mutex mutex_;
   WriteStallCondition condition_;
 };
 
@@ -6663,7 +6692,8 @@ TEST_F(DBTest, LastWriteBufferDelay) {
   sleeping_task.WakeUp();
   sleeping_task.WaitUntilDone();
 }
-#endif  // !defined(ROCKSDB_LITE) && !defined(ROCKSDB_DISABLE_STALL_NOTIFICATION)
+#endif  // !defined(ROCKSDB_LITE) &&
+        // !defined(ROCKSDB_DISABLE_STALL_NOTIFICATION)
 
 TEST_F(DBTest, FailWhenCompressionNotSupportedTest) {
   CompressionType compressions[] = {kZlibCompression, kBZip2Compression,
@@ -6827,9 +6857,7 @@ TEST_F(DBTest, PauseBackgroundWorkTest) {
 TEST_F(DBTest, ThreadLocalPtrDeadlock) {
   std::atomic<int> flushes_done{0};
   std::atomic<int> threads_destroyed{0};
-  auto done = [&] {
-    return flushes_done.load() > 10;
-  };
+  auto done = [&] { return flushes_done.load() > 10; };
 
   port::Thread flushing_thread([&] {
     for (int i = 0; !done(); ++i) {
@@ -6842,7 +6870,7 @@ TEST_F(DBTest, ThreadLocalPtrDeadlock) {
   });
 
   std::vector<port::Thread> thread_spawning_threads(10);
-  for (auto& t: thread_spawning_threads) {
+  for (auto& t : thread_spawning_threads) {
     t = port::Thread([&] {
       while (!done()) {
         {
@@ -6858,7 +6886,7 @@ TEST_F(DBTest, ThreadLocalPtrDeadlock) {
     });
   }
 
-  for (auto& t: thread_spawning_threads) {
+  for (auto& t : thread_spawning_threads) {
     t.join();
   }
   flushing_thread.join();

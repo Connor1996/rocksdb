@@ -4,6 +4,7 @@
 // (found in the LICENSE.Apache file in the root directory).
 
 #include "db/wal_edit.h"
+#include <iostream>
 
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
@@ -195,6 +196,9 @@ Status WalSet::CheckWals(
     if (!s.ok()) {
       break;
     }
+    std::cout << "log_file_size: " << log_file_size << std::endl;
+    std::cout << "wal_meta.GetSyncedSizeInBytes(): "
+              << wal_meta.GetSyncedSizeInBytes() << std::endl;
     if (log_file_size < wal_meta.GetSyncedSizeInBytes()) {
       std::stringstream ss;
       ss << "Size mismatch: WAL (log number: " << log_number
