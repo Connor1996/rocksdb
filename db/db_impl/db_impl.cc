@@ -4863,8 +4863,7 @@ Status DBImpl::IngestExternalFiles(
                 static_cast<ColumnFamilyHandleImpl*>(args[i].column_family)
                     ->cfd();
             status = FlushMemTable(cfd, flush_opts,
-                                   FlushReason::kExternalFileIngestion,
-                                   true /* writes_stopped */);
+                                   FlushReason::kExternalFileIngestion);
             mutex_.Lock();
             if (!status.ok()) {
               break;

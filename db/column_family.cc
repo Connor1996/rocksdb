@@ -1179,10 +1179,11 @@ Status ColumnFamilyData::RangesOverlapWithMemtables(
       if (memtable_iter->Valid() &&
           ucmp->Compare(seek_result.user_key, ranges[i].limit) <= 0) {
         ROCKS_LOG_INFO(ioptions_.info_log,
-                       "Range [%s, %s] overlaps with memtable %s",
+                       "Range [%s, %s] overlaps with memtable %s of type %d",
                        ranges[i].start.ToString(true).c_str(),
                        ranges[i].limit.ToString(true).c_str(),
-                       seek_result.user_key.ToString(true).c_str());
+                       seek_result.user_key.ToString(true).c_str(),
+                       seek_result.type);
         *overlap = true;
       } else if (range_del_agg.IsRangeOverlapped(ranges[i].start,
                                                  ranges[i].limit)) {
