@@ -3229,18 +3229,6 @@ SnapshotImpl* DBImpl::GetSnapshotImpl(bool is_write_conflict_boundary,
   return snapshot;
 }
 
-namespace {
-using CfdList = autovector<ColumnFamilyData*, 2>;
-bool CfdListContains(const CfdList& list, ColumnFamilyData* cfd) {
-  for (const ColumnFamilyData* t : list) {
-    if (t == cfd) {
-      return true;
-    }
-  }
-  return false;
-}
-}  //  namespace
-
 void DBImpl::ReleaseSnapshot(const Snapshot* s) {
   if (s == nullptr) {
     // DBImpl::GetSnapshot() can return nullptr when snapshot
