@@ -71,12 +71,10 @@ class SnapshotList {
     }
   }
   SnapshotImpl* oldest() const {
-    MutexLock l(&mutex_);
     assert(!empty(false));
     return list_.next_;
   }
   SnapshotImpl* newest() const {
-    MutexLock l(&mutex_);
     assert(!empty(false));
     return list_.prev_;
   }
@@ -155,6 +153,7 @@ class SnapshotList {
 
   // get the sequence number of the most recent snapshot
   SequenceNumber GetNewest() {
+    MutexLock l(&mutex_);
     if (empty(false)) {
       return 0;
     }
@@ -162,6 +161,7 @@ class SnapshotList {
   }
 
   int64_t GetOldestSnapshotTime() const {
+    MutexLock l(&mutex_);
     if (empty(false)) {
       return 0;
     } else {
@@ -170,6 +170,7 @@ class SnapshotList {
   }
 
   int64_t GetOldestSnapshotSequence() const {
+    MutexLock l(&mutex_);
     if (empty(false)) {
       return 0;
     } else {
