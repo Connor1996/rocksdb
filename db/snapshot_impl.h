@@ -85,11 +85,11 @@ class SnapshotList {
     s->unix_time_ = unix_time;
     s->is_write_conflict_boundary_ = is_write_conflict_boundary;
     s->list_ = this;
-    s->prev_->next_ = s;
-    s->next_->prev_ = s;
     MutexLock l(&mutex_);
     s->next_ = &list_;
     s->prev_ = list_.prev_;
+    s->prev_->next_ = s;
+    s->next_->prev_ = s;
     count_++;
     return s;
   }
