@@ -46,6 +46,7 @@
 #include "db/table_cache.h"
 #include "db/version_builder.h"
 #include "db/version_edit.h"
+#include "db/version_set_deletion_scheduler.h"
 #include "db/write_controller.h"
 #include "env/file_system_tracer.h"
 #if USE_COROUTINES
@@ -628,6 +629,8 @@ class VersionStorageInfo {
     file_indexer_.UpdateIndex(&arena_, num_non_empty_levels_, files_);
   }
 
+  // Generate file_locations_ mapping for fast file location lookup
+  void GenerateFileLocations();
   void GenerateLevelFilesBrief();
   void GenerateLevel0NonOverlapping();
   void GenerateBottommostFiles();
@@ -994,7 +997,7 @@ class Version {
       std::shared_ptr<const TableProperties>* tp, int level = -1);
 
   uint64_t GetEstimatedActiveKeys() {
-    return storage_info_.GetEstimatedActiveKeys();
+    return storage_info_->GetEstimatedActiveKeys();
   }
 
   size_t GetMemoryUsageByTableReaders(const ReadOptions& read_options);
@@ -1006,8 +1009,8 @@ class Version {
 
   int TEST_refs() const { return refs_; }
 
-  VersionStorageInfo* storage_info() { return &storage_info_; }
-  const VersionStorageInfo* storage_info() const { return &storage_info_; }
+  VersionStorageInfo* storage_info() { return storage_info_; }
+  const VersionStorageInfo* storage_info() const { return storage_info_; }
 
   VersionSet* version_set() { return vset_; }
 
@@ -1038,10 +1041,10 @@ class Version {
   friend class VersionEditHandlerPointInTime;
 
   const InternalKeyComparator* internal_comparator() const {
-    return storage_info_.internal_comparator_;
+    return storage_info_->internal_comparator_;
   }
   const Comparator* user_comparator() const {
-    return storage_info_.user_comparator_;
+    return storage_info_->user_comparator_;
   }
 
   // Returns true if the filter blocks in the specified level will not be
@@ -1097,7 +1100,7 @@ class Version {
   BlobSource* blob_source_;
   const MergeOperator* merge_operator_;
 
-  VersionStorageInfo storage_info_;
+  VersionStorageInfo* storage_info_;
   VersionSet* vset_;  // VersionSet to which this Version belongs
   Version* next_;     // Next version in linked list
   Version* prev_;     // Previous version in linked list
@@ -1678,6 +1681,8 @@ class VersionSet {
 
   // Pointer to the DB's ErrorHandler.
   ErrorHandler* const error_handler_;
+  // Dedicated background thread scheduler for storage deletion operations
+  std::unique_ptr<VersionSetDeletionScheduler> deletion_scheduler_;
 
  private:
   // REQUIRES db mutex at beginning. may release and re-acquire db mutex

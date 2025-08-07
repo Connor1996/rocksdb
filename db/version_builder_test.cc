@@ -85,6 +85,7 @@ class VersionBuilderTest : public testing::Test {
       f->init_stats_from_file = true;
       vstorage_.UpdateAccumulatedStats(f);
     }
+    vstorage_.GenerateFileLocations();
   }
 
   void AddBlob(uint64_t blob_file_number, uint64_t total_blob_count,
@@ -1151,6 +1152,7 @@ TEST_F(VersionBuilderTest, SaveBlobFilesTo) {
       0, OffpeakTimeOption(options_.daily_offpeak_time_utc));
 
   ASSERT_OK(builder.SaveTo(&new_vstorage));
+  new_vstorage.GenerateFileLocations();
 
   UpdateVersionStorageInfo(&new_vstorage);
 
